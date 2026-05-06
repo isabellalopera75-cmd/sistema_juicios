@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Juicios Evaluativos</title>
+  <link rel="stylesheet" href="assets/css/styles.css?v=analytics-3">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<nav>
+  <span class="brand">Juicios Evaluativos</span>
+  <button class="active" onclick="setPage('dashboard', this)">Dashboard</button>
+  <button onclick="setPage('explorador', this)">Explorador</button>
+  <button onclick="setPage('importar', this)">Importar XLS</button>
+</nav>
+
+<main>
+  <section class="ficha-bar">
+    <label for="g-ficha">Ficha</label>
+    <select id="g-ficha" onchange="onFichaChange()">
+      <option value="">Selecciona una ficha...</option>
+    </select>
+    <span class="ficha-info" id="g-ficha-info"></span>
+  </section>
+
+  <section class="page active" id="page-dashboard">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Resumen general</p>
+        <h1>Estado academico de la ficha</h1>
+      </div>
+      <div class="heading-actions">
+        <button class="btn btn-primary ai-btn" id="dash-ai-btn" onclick="generarResumenIA()">Generar resumen IA</button>
+        <button class="btn btn-outline" onclick="goToExplorer()">Analizar aprendices</button>
+      </div>
+    </div>
+
+    <section id="dash-ai-result" class="ai-box ai-box-dashboard" style="display:none;" aria-live="polite"></section>
+
+    <div class="kpi-grid" id="kpi-grid">
+      <div class="kpi primary"><div class="val" id="k-total">-</div><div class="lbl">Aprendices</div></div>
+      <div class="kpi teal"><div class="val" id="k-formacion">-</div><div class="lbl">En formacion</div></div>
+      <div class="kpi red"><div class="val" id="k-retirados">-</div><div class="lbl">Retirados</div></div>
+      <div class="kpi amber"><div class="val" id="k-traslados">-</div><div class="lbl">Trasladados</div></div>
+      <div class="kpi teal"><div class="val" id="k-aprobados">-</div><div class="lbl">Aprobados</div></div>
+      <div class="kpi amber"><div class="val" id="k-pendientes">-</div><div class="lbl">Por evaluar</div></div>
+      <div class="kpi primary"><div class="val" id="k-pct">-</div><div class="lbl">Avance global</div></div>
+    </div>
+
+    <div class="charts-row">
+      <section class="panel">
+        <div class="panel-title">
+          <h2>Estados de aprendices</h2>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-estados"></canvas></div>
+      </section>
+      <section class="panel">
+        <div class="panel-title">
+          <h2>Juicios evaluativos</h2>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-juicios"></canvas></div>
+      </section>
+    </div>
+
+    <section class="analytics-section">
+      <div class="section-heading analytics-heading">
+        <div>
+          <p class="eyebrow">Analitica academica</p>
+          <h1>Riesgos, pendientes y comparativos</h1>
+        </div>
+      </div>
+
+      <section class="insight-strip" id="analytics-insights">
+        <div><strong>-</strong><span>Competencia critica</span></div>
+        <div><strong>-</strong><span>Resultado mas pendiente</span></div>
+        <div><strong>-</strong><span>Atrasados frente al grupo</span></div>
+        <div><strong>-</strong><span>Menor avance por estado</span></div>
+      </section>
+
+      <div class="analytics-grid">
+        <section class="panel analytics-panel">
+          <div class="panel-title">
+            <h2>Competencias con menor aprobacion</h2>
+          </div>
+          <div id="analytics-low-comps" class="rank-list"></div>
+        </section>
+
+        <section class="panel analytics-panel">
+          <div class="panel-title">
+            <h2>Resultados de aprendizaje mas pendientes</h2>
+          </div>
+          <div id="analytics-pending-results" class="rank-list"></div>
+        </section>
+
+        <section class="panel analytics-panel">
+          <div class="panel-title">
+            <h2>Aprendices atrasados frente al grupo</h2>
+          </div>
+          <div id="analytics-risk-students" class="rank-list"></div>
+        </section>
+      </div>
+
+      <div class="charts-row analytics-bottom">
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Estado de aprendices vs avance</h2>
+          </div>
+          <div class="chart-wrap"><canvas id="chart-estado-avance"></canvas></div>
+        </section>
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Comparacion por ficha</h2>
+          </div>
+          <div id="analytics-fichas" class="rank-list"></div>
+        </section>
+      </div>
+    </section>
+  </section>
+
+  <section class="page" id="page-explorador">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Consulta unificada</p>
+        <h1>Filtra, compara y abre el estudio de cada aprendiz</h1>
+      </div>
+      <button class="btn btn-outline" onclick="exportExplorerCSV()">Exportar CSV</button>
+    </div>
+
+    <section class="filters explorer-filters">
+      <input type="text" id="ex-busqueda" placeholder="Buscar por nombre, apellido o documento" oninput="debouncedExplorer()">
+      <select id="ex-estado-ap" onchange="loadExplorer()">
+        <option value="">Todos los estados</option>
+        <option>EN FORMACION</option>
+        <option>RETIRO VOLUNTARIO</option>
+        <option>TRASLADADO</option>
+        <option>APLAZADO</option>
+      </select>
+      <select id="ex-estado-juicio" onchange="loadExplorer()">
+        <option value="">Todos los juicios</option>
+        <option>APROBADO</option>
+        <option>POR EVALUAR</option>
+      </select>
+      <select id="ex-competencia" onchange="loadExplorer()">
+        <option value="">Todas las competencias</option>
+      </select>
+      <select id="ex-instructor" onchange="loadExplorer()">
+        <option value="">Todos los instructores</option>
+      </select>
+      <select id="ex-rango" onchange="loadExplorer()">
+        <option value="">Cualquier avance</option>
+        <option value="critico">Critico: 0% - 30%</option>
+        <option value="medio">En proceso: 30% - 70%</option>
+        <option value="avanzado">Avanzado: 70% - 99%</option>
+        <option value="completado">Completado: 100%</option>
+      </select>
+      <button class="btn btn-outline" onclick="clearExplorerFilters()">Limpiar</button>
+    </section>
+
+    <section class="summary-strip" id="ex-summary">
+      <div><strong>-</strong><span>Aprendices</span></div>
+      <div><strong>-</strong><span>Promedio avance</span></div>
+      <div><strong>-</strong><span>Aprobados</span></div>
+      <div><strong>-</strong><span>Pendientes</span></div>
+    </section>
+
+    <section class="table-wrap">
+      <div class="table-header">
+        <span class="title">Aprendices y juicios filtrados</span>
+        <span class="count" id="ex-count"></span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Aprendiz</th>
+              <th>Estado</th>
+              <th>Resultados</th>
+              <th>Aprobados</th>
+              <th>Pendientes</th>
+              <th>Avance</th>
+              <th>Accion</th>
+            </tr>
+          </thead>
+          <tbody id="ex-tbody">
+            <tr><td colspan="8" class="loading">Selecciona una ficha</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <section class="page" id="page-importar">
+    <section class="import-card">
+      <p class="eyebrow">Carga de datos</p>
+      <h1>Importar reporte de juicios</h1>
+      <p>Sube el archivo .xls o .xlsx generado por Sofia Plus para actualizar ficha, programa, aprendices, competencias, resultados e instructores.</p>
+
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <div class="icon">XLS</div>
+        <p><strong>Selecciona el archivo</strong> o arrastralo aqui</p>
+        <p id="drop-filename"></p>
+      </div>
+      <input type="file" id="file-input" accept=".xls,.xlsx" onchange="onFileSelected(this)">
+
+      <div class="progress-bar" id="prog-bar"><div class="progress-fill"></div></div>
+      <button class="btn btn-primary full" onclick="uploadFile()" id="btn-upload" disabled>Importar archivo</button>
+      <div class="result-box" id="import-result"></div>
+    </section>
+  </section>
+</main>
+
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <section class="modal">
+    <header class="modal-header">
+      <div>
+        <p class="eyebrow">Estudio individual</p>
+        <h2 id="modal-title">Aprendiz</h2>
+      </div>
+      <button class="modal-close" onclick="closeModalDirect()" aria-label="Cerrar">x</button>
+    </header>
+
+    <div class="modal-body">
+      <div class="student-study">
+        <aside class="study-side">
+          <div class="score-ring"><canvas id="modal-chart"></canvas></div>
+          <div id="modal-kpis-mini" class="mini-kpis"></div>
+          <div id="modal-status" class="status-box"></div>
+          <button class="btn btn-primary full ai-btn" style="margin-top:14px;" onclick="generarAnalisisIA()">✨ Generar análisis IA</button>
+          <div id="modal-ai-result" class="ai-box" style="display:none; margin-top:14px;"></div>
+        </aside>
+
+        <section class="study-main">
+          <div class="study-grid">
+            <article class="study-card">
+              <h3>Avance por competencia</h3>
+              <div class="chart-wrap modal-bars"><canvas id="modal-chart-comp"></canvas></div>
+            </article>
+            <article class="study-card" id="modal-alerts">
+              <h3>Pendientes prioritarios</h3>
+              <div id="alerts-list"></div>
+            </article>
+          </div>
+
+          <div class="filters modal-filters">
+            <select id="modal-filter-comp" onchange="filterModalJuicios()">
+              <option value="">Todas las competencias</option>
+            </select>
+            <select id="modal-filter-status" onchange="filterModalJuicios()">
+              <option value="">Todos los juicios</option>
+              <option>APROBADO</option>
+              <option>POR EVALUAR</option>
+            </select>
+            <span id="modal-count"></span>
+          </div>
+
+          <div class="table-scroll compact">
+            <table>
+              <thead>
+                <tr>
+                  <th>Competencia</th>
+                  <th>Resultado</th>
+                  <th>Juicio</th>
+                  <th>Fecha</th>
+                  <th>Instructor</th>
+                </tr>
+              </thead>
+              <tbody id="modal-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="assets/js/app.js?v=analytics-3"></script>
+</body>
+</html>

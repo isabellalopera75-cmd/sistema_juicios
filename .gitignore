@@ -1,0 +1,5 @@
+/vendor/
+.env
+includes/config.php
+*.log
+includes/ai_config.php
