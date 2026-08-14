@@ -1535,6 +1535,11 @@ function escHtml(str) {
  
 // ── Modal crear fase ──────────────────────────────────────────────────────
 function abrirModalCrearFase() {
+  const idFicha = state.fichaId || document.getElementById('g-ficha')?.value;
+  if (!idFicha) {
+    alert('Por favor, selecciona una ficha antes de crear una fase.');
+    return;
+  }
   document.getElementById('mf-id-fase').value = '';
   document.getElementById('mf-nombre').value = '';
   document.getElementById('mf-descripcion').value = '';
@@ -1567,7 +1572,8 @@ async function guardarFase() {
   const errEl  = document.getElementById('mf-error');
   if (!nombre) { errEl.textContent = 'El nombre es obligatorio.'; errEl.style.display='block'; return; }
  
-  const idFicha = document.getElementById('g-ficha')?.value;
+  const idFicha = state.fichaId || document.getElementById('g-ficha')?.value;
+  if (!idFicha) { errEl.textContent = 'Falta seleccionar la ficha.'; errEl.style.display='block'; return; }
   const action  = idFase ? 'editar_fase' : 'crear_fase';
   const body    = {
     action,
