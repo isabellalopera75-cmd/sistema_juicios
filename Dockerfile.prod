@@ -1,0 +1,26 @@
+FROM php:8.2-apache
+
+# Habilitar mod_rewrite de Apache (útil para URLs limpias)
+RUN a2enmod rewrite
+
+# Instalar dependencias del sistema y extensiones PHP (PDO para BD, Zip para PhpSpreadsheet)
+RUN apt-get update && apt-get install -y \
+    libzip-dev \
+    zip \
+    && docker-php-ext-install pdo_mysql zip
+
+# Instalar Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Directorio de trabajo de Apache
+WORKDIR /var/www/html
+
+# Copiar el código de la aplicación
+COPY . /var/www/html/
+
+# Instalar dependencias de PHP sin dependencias de desarrollo
+RUN composer install --no-dev --optimize-autoloader
+
+# Configurar permisos correctos para que Apache pueda leer los archivos
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html
