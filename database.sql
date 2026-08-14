@@ -149,3 +149,56 @@ JOIN resultado r    ON j.id_resultado  = r.id_resultado
 JOIN competencia c  ON r.id_competencia = c.id_competencia
 JOIN ficha f        ON j.id_ficha = f.id_ficha
 GROUP BY f.codigo_ficha, c.id_competencia, c.nombre;
+
+-- ------------------------------------------------------------
+-- TABLAS Y VISTAS PARA MÓDULO DE FASES DEL PROYECTO FORMATIVO
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS fase_proyecto (
+  id_fase       INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  id_ficha      INT UNSIGNED NOT NULL,
+  nombre        VARCHAR(200) NOT NULL,
+  descripcion   TEXT,
+  orden         TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  fecha_inicio  DATE,
+  fecha_fin     DATE,
+  FOREIGN KEY (id_ficha) REFERENCES ficha(id_ficha) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS fase_competencia (
+  id_fc           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  id_fase         INT UNSIGNED NOT NULL,
+  id_competencia  INT UNSIGNED NOT NULL,
+  id_resultado    INT UNSIGNED,
+  UNIQUE KEY uq_fase_resultado (id_fase, id_resultado),
+  FOREIGN KEY (id_fase)        REFERENCES fase_proyecto(id_fase)     ON DELETE CASCADE,
+  FOREIGN KEY (id_competencia) REFERENCES competencia(id_competencia),
+  FOREIGN KEY (id_resultado)   REFERENCES resultado(id_resultado)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE OR REPLACE VIEW v_avance_fase AS
+SELECT
+  fp.id_fase,
+  fp.id_ficha,
+  fi.codigo_ficha,
+  fp.nombre        AS fase,
+  fp.orden,
+  fp.fecha_inicio,
+  fp.fecha_fin,
+  COUNT(DISTINCT fc.id_resultado)                          AS total_resultados,
+  COUNT(DISTINCT CASE WHEN j.estado='APROBADO' THEN j.id_aprendiz*10000+j.id_resultado END) AS aprobaciones,
+  COUNT(DISTINCT j.id_aprendiz*10000+j.id_resultado)       AS total_posibles,
+  ROUND(
+    COUNT(DISTINCT CASE WHEN j.estado='APROBADO' THEN j.id_aprendiz*10000+j.id_resultado END)
+    * 100.0
+    / NULLIF(COUNT(DISTINCT j.id_aprendiz*10000+j.id_resultado), 0)
+  , 1) AS pct_cumplimiento,
+  COUNT(DISTINCT CASE WHEN j.estado='APROBADO'
+        THEN j.id_aprendiz END)                            AS aprendices_aprobados,
+  COUNT(DISTINCT j.id_aprendiz)                            AS total_aprendices
+FROM fase_proyecto fp
+JOIN ficha fi         ON fp.id_ficha         = fi.id_ficha
+LEFT JOIN fase_competencia fc ON fp.id_fase       = fc.id_fase
+LEFT JOIN juicio_evaluativo j ON fc.id_resultado = j.id_resultado
+                              AND j.id_ficha    = fp.id_ficha
+GROUP BY fp.id_fase, fp.id_ficha, fi.codigo_ficha, fp.nombre, fp.orden, fp.fecha_inicio, fp.fecha_fin;

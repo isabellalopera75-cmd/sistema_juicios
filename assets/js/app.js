@@ -87,10 +87,27 @@ function setPage(name, btn) {
   $(`page-${name}`).classList.add('active');
   btn.classList.add('active');
 
+  const fichaBar = document.getElementById('ficha-bar-container');
+  if (fichaBar) {
+    if (name === 'bienvenida') {
+      fichaBar.style.display = 'none';
+    } else {
+      fichaBar.style.display = 'flex';
+    }
+  }
+
   if (name === 'explorador') {
     loadExplorerFilters();
     loadExplorer();
   }
+}
+
+function goToDashboard() {
+  const btnInicio = document.getElementById('btn-inicio');
+  if (btnInicio) btnInicio.style.display = 'none';
+  document.querySelectorAll('.sys-btn').forEach(b => b.style.display = 'inline-block');
+  const btn = [...document.querySelectorAll('nav button')].find(b => b.textContent.includes('Dashboard'));
+  setPage('dashboard', btn);
 }
 
 function goToExplorer() {
@@ -129,12 +146,28 @@ function onFichaChange() {
 
   if (!state.fichaId) {
     $('g-ficha-info').textContent = 'Todas las fichas';
+    const de = $('analytics-empty');
+    if (de) de.style.display = 'block';
+    const dc = $('analytics-content');
+    if (dc) dc.style.display = 'none';
+    const dcharts = $('dashboard-charts');
+    if (dcharts) dcharts.style.display = 'none';
+    const grid = $('kpi-grid');
+    if (grid) grid.classList.add('didactic-mode');
   } else {
     $('g-ficha-info').textContent = [
       state.fichaInfo.estado_ficha,
       state.fichaInfo.modalidad,
       state.fichaInfo.regional,
     ].filter(Boolean).join(' | ');
+    const de = $('analytics-empty');
+    if (de) de.style.display = 'none';
+    const dc = $('analytics-content');
+    if (dc) dc.style.display = 'block';
+    const dcharts = $('dashboard-charts');
+    if (dcharts) dcharts.style.display = 'grid';
+    const grid = $('kpi-grid');
+    if (grid) grid.classList.remove('didactic-mode');
   }
 
   loadDashboard();
@@ -208,7 +241,6 @@ function renderAnalitica(data) {
   renderLowCompetences(lowComps);
   renderPendingResults(pendingResults);
   renderRiskStudents(riskStudents);
-  renderFichaComparison(fichaRows);
   drawEstadoAvance(estadoRows);
 }
 
@@ -1124,4 +1156,577 @@ function generarResumenIA() {
   }));
 
   callIA('resumen_ficha', datos, 'dash-ai-result');
+}
+
+// --- Funciones de Exportación a PDF (Reportes) ---
+
+/**
+ * Exporta el Dashboard actual a un PDF profesional
+ */
+async function exportarDashboardPDF() {
+  if (!state.fichaId) {
+    alert('Por favor selecciona una ficha primero.');
+    return;
+  }
+
+  const element = document.createElement('div');
+  element.className = 'pdf-report';
+  
+  const fichaNombre = $('g-ficha').options[$('g-ficha').selectedIndex].text;
+  const fecha = new Date().toLocaleDateString();
+
+  element.innerHTML = `
+    <div class="pdf-header">
+      <div class="pdf-brand">SISTEMA DE JUICIOS EVALUATIVOS</div>
+      <div class="pdf-title">Reporte Ejecutivo de Ficha</div>
+    </div>
+    
+    <div class="pdf-info-grid">
+      <div><strong>Ficha:</strong> ${esc(fichaNombre)}</div>
+      <div><strong>Fecha de reporte:</strong> ${fecha}</div>
+      <div><strong>Estado:</strong> ${esc(state.fichaInfo.estado_ficha || 'N/A')}</div>
+      <div><strong>Modalidad:</strong> ${esc(state.fichaInfo.modalidad || 'N/A')}</div>
+    </div>
+
+    <div class="pdf-section-title">Resumen de Indicadores (KPIs)</div>
+    <div class="pdf-kpi-container">
+      ${$('kpi-grid').innerHTML}
+    </div>
+
+    <div class="pdf-section-title">Distribución y Avance</div>
+    <div class="pdf-charts-row">
+       <div class="pdf-chart-item">
+         <p>Estados de Aprendices</p>
+         <img src="${$('chart-estados').toDataURL('image/png')}" style="width:100%">
+       </div>
+       <div class="pdf-chart-item">
+         <p>Juicios Evaluativos</p>
+         <img src="${$('chart-juicios').toDataURL('image/png')}" style="width:100%">
+       </div>
+    </div>
+
+    <div class="pdf-section-title">Análisis de Competencias</div>
+    <div class="pdf-rank-list">
+      ${$('analytics-low-comps').innerHTML}
+    </div>
+
+    <div class="pdf-footer">
+      Documento generado automáticamente por el Sistema de Juicios Evaluativos.
+    </div>
+  `;
+
+  const opt = {
+    margin: [10, 10],
+    filename: `Reporte_Ficha_${state.fichaInfo.codigo_ficha || 'General'}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  try {
+    await html2pdf().set(opt).from(element).save();
+  } catch (err) {
+    console.error('Error generando PDF:', err);
+    alert('No se pudo generar el PDF. Verifica la consola.');
+  }
+}
+
+/**
+ * Exporta el estudio del aprendiz actual a una Ficha de Seguimiento PDF
+ */
+async function exportarAprendizPDF() {
+  if (!currentModalId) return;
+
+  const element = document.createElement('div');
+  element.className = 'pdf-report pdf-student';
+  
+  const nombre = $('modal-title').textContent;
+  const fichaNombre = $('g-ficha').options[$('g-ficha').selectedIndex].text;
+  const fecha = new Date().toLocaleDateString();
+
+  // Capturamos los gráficos actuales antes de clonar
+  const chartImg = $('modal-chart').toDataURL('image/png');
+  const chartCompImg = $('modal-chart-comp').toDataURL('image/png');
+
+  element.innerHTML = `
+    <div class="pdf-header">
+      <div class="pdf-brand">SISTEMA DE JUICIOS EVALUATIVOS</div>
+      <div class="pdf-title">Ficha de Seguimiento Individual</div>
+    </div>
+    
+    <div class="pdf-info-grid">
+      <div><strong>Aprendiz:</strong> ${esc(nombre)}</div>
+      <div><strong>Ficha:</strong> ${esc(fichaNombre)}</div>
+      <div><strong>Fecha:</strong> ${fecha}</div>
+      <div><strong>Estado Sistema:</strong> ${$('modal-status').querySelector('strong').textContent}</div>
+    </div>
+
+    <div class="pdf-two-cols">
+      <div class="pdf-col-side">
+        <div class="pdf-section-title">Avance Global</div>
+        <img src="${chartImg}" style="width:100%; max-width:200px; margin: 0 auto; display:block;">
+        <div class="pdf-mini-stats">
+          ${$('modal-kpis-mini').innerHTML}
+        </div>
+      </div>
+      <div class="pdf-col-main">
+        <div class="pdf-section-title">Avance por Competencia</div>
+        <img src="${chartCompImg}" style="width:100%">
+      </div>
+    </div>
+
+    <div class="pdf-section-title">Alertas y Pendientes Prioritarios</div>
+    <div class="pdf-alerts">
+      ${$('alerts-list').innerHTML}
+    </div>
+
+    <div class="pdf-section-title">Detalle de Juicios Evaluativos</div>
+    <div class="pdf-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Competencia</th>
+            <th>Resultado</th>
+            <th>Juicio</th>
+            <th>Fecha</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Array.from($('modal-tbody').rows).map(row => `
+            <tr>
+              <td>${row.cells[0].textContent}</td>
+              <td>${row.cells[1].textContent}</td>
+              <td>${row.cells[2].textContent}</td>
+              <td>${row.cells[3].textContent}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pdf-footer">
+      Este reporte sirve como soporte de seguimiento académico para el aprendiz.
+    </div>
+  `;
+
+  const opt = {
+    margin: [10, 10],
+    filename: `Seguimiento_${nombre.replace(/\s+/g, '_')}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  try {
+    await html2pdf().set(opt).from(element).save();
+  } catch (err) {
+    console.error('Error generando PDF:', err);
+    alert('No se pudo generar el PDF.');
+  }
+}
+// ═══════════════════════════════════════════════════════════════════════════
+//  MÓDULO FASES — completo
+// ═══════════════════════════════════════════════════════════════════════════
+ 
+let fasesData        = [];   // fases de la ficha activa
+let faseSeleccionada = null; // objeto fase actualmente abierta
+let resultadosFicha  = [];   // competencias+resultados para asignar
+ 
+// ── Cargar fases cuando cambia la ficha ────────────────────────────────────
+// Agregar esta línea dentro de la función onFichaChange() existente en app.js:
+//   if (document.getElementById('page-fases').classList.contains('active')) loadFases();
+//
+// O bien, en setPage() cuando page === 'fases', llama loadFases().
+// La forma más simple es agregar al final de onFichaChange():
+ 
+const _origOnFichaChange = typeof onFichaChange === 'function' ? onFichaChange : null;
+ 
+function loadFasesIfActive() {
+  const pg = document.getElementById('page-fases');
+  if (pg && pg.classList.contains('active')) loadFases();
+}
+ 
+// Hook: cuando cambie la ficha y estemos en la pestaña fases, recargar
+document.addEventListener('DOMContentLoaded', function() {
+  const sel = document.getElementById('g-ficha');
+  if (sel) sel.addEventListener('change', loadFasesIfActive);
+ 
+  // También al entrar a la pestaña
+  const btn = document.querySelector('[onclick*="fases"]');
+  if (btn) btn.addEventListener('click', () => setTimeout(loadFases, 50));
+});
+ 
+// ── Cargar todas las fases de la ficha ────────────────────────────────────
+async function loadFases() {
+  const idFicha = document.getElementById('g-ficha')?.value;
+  const container = document.getElementById('fases-dashboard');
+  const detalle = document.getElementById('fases-detalle');
+ 
+  if (!idFicha) {
+    container.innerHTML = '<p class="fases-placeholder">Selecciona una ficha para ver las fases.</p>';
+    detalle.style.display = 'none';
+    return;
+  }
+ 
+  container.innerHTML = '<p class="fases-placeholder">Cargando fases...</p>';
+ 
+  try {
+    const res = await fetch(`api_fases.php?action=fases_ficha&id_ficha=${idFicha}`);
+    fasesData = await res.json();
+ 
+    if (!fasesData.length) {
+      container.innerHTML = `
+        <div class="fases-placeholder">
+          <p style="margin-bottom: 20px; font-size: 16px; color: var(--text);">Esta ficha aún no tiene fases definidas en su proyecto formativo.</p>
+          <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="generarFasesEstandarSENA()">
+              <span style="margin-right:8px;">⚡</span> Autogenerar 4 Fases SENA (Análisis, Planeación, Ejecución, Evaluación)
+            </button>
+            <button class="btn btn-outline" onclick="abrirModalCrearFase()">+ Crear fase manual</button>
+          </div>
+        </div>
+      `;
+      detalle.style.display = 'none';
+      return;
+    }
+ 
+    renderFasesOverview();
+ 
+    // Si había una fase seleccionada, la volvemos a abrir
+    if (faseSeleccionada) {
+      const f = fasesData.find(x => x.id_fase == faseSeleccionada.id_fase);
+      if (f) abrirDetalleFase(f);
+    }
+  } catch(e) {
+    container.innerHTML = '<p class="fases-placeholder" style="color:#dc3545">Error al cargar fases.</p>';
+  }
+}
+
+// ── Autogenerar fases estándar SENA ──────────────────────────────────────
+async function generarFasesEstandarSENA() {
+  const idFicha = document.getElementById('g-ficha')?.value;
+  if (!idFicha) return;
+  
+  try {
+    const res = await fetch('api_fases.php?action=generar_fases_sena', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'generar_fases_sena', id_ficha: idFicha })
+    });
+    const data = await res.json();
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+    await loadFases();
+  } catch (e) {
+    alert('Error al generar las fases estándar.');
+  }
+}
+ 
+// ── Renderizar las tarjetas de fases ─────────────────────────────────────
+function renderFasesOverview() {
+  const container = document.getElementById('fases-dashboard');
+  container.innerHTML = '';
+ 
+  fasesData.forEach(fase => {
+    const pct = parseFloat(fase.pct_cumplimiento) || 0;
+    const color = pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc3545';
+    const isActive = faseSeleccionada && faseSeleccionada.id_fase == fase.id_fase;
+ 
+    const card = document.createElement('div');
+    card.className = 'fase-card' + (isActive ? ' active' : '');
+    card.innerHTML = `
+      <div class="fase-card-header">
+        <h3>${fase.orden}. ${escHtml(fase.nombre)}</h3>
+        <span class="fase-pct" style="color:${color}">${pct}%</span>
+      </div>
+      <div class="fase-prog-bar">
+        <div class="fase-prog-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+      <div class="fase-meta">
+        <span>📚 ${fase.total_resultados} resultado(s)</span>
+        <span>✅ ${fase.aprendices_aprobados} aprendices completaron</span>
+        <span>👥 ${fase.total_aprendices} total</span>
+        ${fase.fecha_inicio ? `<span>📅 ${fase.fecha_inicio} → ${fase.fecha_fin || '?'}</span>` : ''}
+        ${fase.descripcion ? `<span>💬 ${escHtml(fase.descripcion)}</span>` : ''}
+      </div>
+    `;
+    card.addEventListener('click', () => abrirDetalleFase(fase));
+    container.appendChild(card);
+  });
+}
+ 
+// ── Abrir detalle de una fase ─────────────────────────────────────────────
+async function abrirDetalleFase(fase) {
+  faseSeleccionada = fase;
+  renderFasesOverview(); // actualiza el resaltado
+ 
+  const idFicha = document.getElementById('g-ficha')?.value;
+  document.getElementById('fases-detalle').style.display = 'block';
+  document.getElementById('fase-detalle-titulo').textContent = `${fase.orden}. ${fase.nombre}`;
+  document.getElementById('fase-aprendices-tbody').innerHTML = '<tr><td colspan="5" class="loading">Cargando...</td></tr>';
+  document.getElementById('fase-resultados-list').innerHTML = '<div class="loading">Cargando...</div>';
+ 
+  try {
+    const res = await fetch(`api_fases.php?action=detalle_fase&id_fase=${fase.id_fase}&id_ficha=${idFicha}`);
+    const data = await res.json();
+ 
+    // Resultados asignados
+    const rList = document.getElementById('fase-resultados-list');
+    if (!data.resultados.length) {
+      rList.innerHTML = '<p style="color:#9ca3af;padding:12px;font-size:13px;">No hay resultados asignados a esta fase. Usa "Asignar resultados".</p>';
+    } else {
+      rList.innerHTML = data.resultados.map(r => `
+        <div class="rank-item" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+          <div>
+            <div style="font-size:11px;color:#6b7280;">${escHtml(r.competencia)}</div>
+            <div style="font-size:13px;font-weight:500;">${escHtml(r.resultado)}</div>
+          </div>
+          <button class="btn btn-outline btn-sm btn-danger" style="flex-shrink:0;"
+            onclick="quitarResultadoFase(${fase.id_fase}, ${r.id_resultado})">✕</button>
+        </div>
+      `).join('');
+    }
+ 
+    // Aprendices
+    const tbody = document.getElementById('fase-aprendices-tbody');
+    if (!data.aprendices.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:20px;">Sin datos (asigna resultados primero)</td></tr>';
+    } else {
+      tbody.innerHTML = data.aprendices.map(a => {
+        const pct = parseFloat(a.pct_fase) || 0;
+        const color = pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc3545';
+        return `
+          <tr>
+            <td>${escHtml(a.aprendiz)}</td>
+            <td><span class="badge ${badgeClass(a.estado)}">${a.estado}</span></td>
+            <td style="text-align:center;">${a.aprobados}</td>
+            <td style="text-align:center;">${a.pendientes}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div style="flex:1;height:6px;background:#e5e7eb;border-radius:99px;overflow:hidden;">
+                  <div style="height:100%;width:${pct}%;background:${color};border-radius:99px;"></div>
+                </div>
+                <span style="font-size:12px;font-weight:700;color:${color};min-width:36px;text-align:right;">${pct}%</span>
+              </div>
+            </td>
+          </tr>`;
+      }).join('');
+    }
+ 
+    document.getElementById('fases-detalle').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+ 
+  } catch(e) {
+    document.getElementById('fase-aprendices-tbody').innerHTML = '<tr><td colspan="5" style="color:#dc3545">Error al cargar detalle.</td></tr>';
+  }
+}
+ 
+// ── Badge helper (reutiliza el que ya existe en app.js si lo tiene) ────────
+function badgeClass(estado) {
+  if (estado === 'EN FORMACION')     return 'badge-green';
+  if (estado === 'RETIRO VOLUNTARIO') return 'badge-red';
+  if (estado === 'TRASLADADO')       return 'badge-amber';
+  return 'badge-gray';
+}
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+ 
+// ── Modal crear fase ──────────────────────────────────────────────────────
+function abrirModalCrearFase() {
+  document.getElementById('mf-id-fase').value = '';
+  document.getElementById('mf-nombre').value = '';
+  document.getElementById('mf-descripcion').value = '';
+  document.getElementById('mf-fecha-inicio').value = '';
+  document.getElementById('mf-fecha-fin').value = '';
+  document.getElementById('mf-error').style.display = 'none';
+  document.getElementById('modal-fase-titulo').textContent = 'Nueva fase';
+  document.getElementById('modal-fase-overlay').style.display = 'flex';
+}
+ 
+function abrirModalEditarFase() {
+  if (!faseSeleccionada) return;
+  document.getElementById('mf-id-fase').value = faseSeleccionada.id_fase;
+  document.getElementById('mf-nombre').value = faseSeleccionada.nombre;
+  document.getElementById('mf-descripcion').value = faseSeleccionada.descripcion || '';
+  document.getElementById('mf-fecha-inicio').value = faseSeleccionada.fecha_inicio || '';
+  document.getElementById('mf-fecha-fin').value = faseSeleccionada.fecha_fin || '';
+  document.getElementById('mf-error').style.display = 'none';
+  document.getElementById('modal-fase-titulo').textContent = 'Editar fase';
+  document.getElementById('modal-fase-overlay').style.display = 'flex';
+}
+ 
+function cerrarModalFase(e) {
+  if (e.target.id === 'modal-fase-overlay') document.getElementById('modal-fase-overlay').style.display = 'none';
+}
+ 
+async function guardarFase() {
+  const idFase = document.getElementById('mf-id-fase').value;
+  const nombre = document.getElementById('mf-nombre').value.trim();
+  const errEl  = document.getElementById('mf-error');
+  if (!nombre) { errEl.textContent = 'El nombre es obligatorio.'; errEl.style.display='block'; return; }
+ 
+  const idFicha = document.getElementById('g-ficha')?.value;
+  const action  = idFase ? 'editar_fase' : 'crear_fase';
+  const body    = {
+    action,
+    id_ficha:      idFicha,
+    id_fase:       idFase,
+    nombre,
+    descripcion:   document.getElementById('mf-descripcion').value,
+    fecha_inicio:  document.getElementById('mf-fecha-inicio').value,
+    fecha_fin:     document.getElementById('mf-fecha-fin').value,
+  };
+ 
+  try {
+    const res  = await fetch('api_fases.php?action=' + action, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.error) { errEl.textContent = data.error; errEl.style.display='block'; return; }
+    document.getElementById('modal-fase-overlay').style.display = 'none';
+    faseSeleccionada = null;
+    await loadFases();
+  } catch(e) {
+    errEl.textContent = 'Error de red. Intenta de nuevo.';
+    errEl.style.display = 'block';
+  }
+}
+ 
+// ── Eliminar fase ─────────────────────────────────────────────────────────
+async function confirmarEliminarFase() {
+  if (!faseSeleccionada) return;
+  if (!confirm(`¿Eliminar la fase "${faseSeleccionada.nombre}"?\nSe quitarán también los resultados asignados. Los juicios no se eliminan.`)) return;
+ 
+  await fetch('api_fases.php?action=eliminar_fase', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'eliminar_fase', id_fase: faseSeleccionada.id_fase })
+  });
+  faseSeleccionada = null;
+  document.getElementById('fases-detalle').style.display = 'none';
+  await loadFases();
+}
+ 
+// ── Modal asignar resultados ──────────────────────────────────────────────
+async function abrirModalAsignar() {
+  if (!faseSeleccionada) return;
+  const idFicha = document.getElementById('g-ficha')?.value;
+ 
+  document.getElementById('asignar-busqueda').value = '';
+  document.getElementById('asignar-lista').innerHTML = '<p style="color:#9ca3af;padding:12px;">Cargando...</p>';
+  document.getElementById('modal-asignar-overlay').style.display = 'flex';
+ 
+  const res = await fetch(`api_fases.php?action=resultados_ficha&id_ficha=${idFicha}`);
+  resultadosFicha = await res.json();
+  renderAsignarLista();
+}
+ 
+function cerrarModalAsignar(e) {
+  if (e.target.id === 'modal-asignar-overlay') {
+    cerrarModalAsignarBtn();
+  }
+}
+
+async function cerrarModalAsignarBtn() {
+  document.getElementById('modal-asignar-overlay').style.display = 'none';
+  if (faseSeleccionada) {
+    await abrirDetalleFase(faseSeleccionada);
+    await loadFases();
+  }
+}
+ 
+function filtrarAsignar() {
+  renderAsignarLista(document.getElementById('asignar-busqueda').value.toLowerCase());
+}
+ 
+function renderAsignarLista(filtro = '') {
+  const lista = document.getElementById('asignar-lista');
+  let html = '';
+ 
+  resultadosFicha.forEach(comp => {
+    const resultsFiltrados = comp.resultados.filter(r =>
+      !filtro ||
+      r.resultado.toLowerCase().includes(filtro) ||
+      comp.competencia.toLowerCase().includes(filtro)
+    );
+    if (!resultsFiltrados.length) return;
+ 
+    html += `<div class="asignar-comp-header">📂 ${escHtml(comp.competencia)}</div>`;
+    resultsFiltrados.forEach(r => {
+      const enEstaFase  = r.id_fase_asignada == faseSeleccionada.id_fase;
+      const enOtraFase  = r.id_fase_asignada && r.id_fase_asignada != faseSeleccionada.id_fase;
+      const faseNombre  = enOtraFase
+        ? (fasesData.find(f => f.id_fase == r.id_fase_asignada)?.nombre || 'otra fase')
+        : '';
+ 
+      html += `
+        <label class="asignar-item${enOtraFase ? ' otro-fase' : ''}" title="${enOtraFase ? 'Ya asignado a: '+faseNombre : ''}">
+          <input type="checkbox"
+            ${enEstaFase ? 'checked' : ''}
+            ${enOtraFase ? 'disabled' : ''}
+            data-id-resultado="${r.id_resultado}"
+            data-id-comp="${comp.id_competencia}"
+            onchange="toggleResultadoFase(this)">
+          <div>
+            <span class="asignar-resultado">${escHtml(r.resultado)}</span>
+            ${enOtraFase ? `<span class="asignar-comp">⚠ Asignado a: ${escHtml(faseNombre)}</span>` : ''}
+          </div>
+        </label>`;
+    });
+  });
+ 
+  lista.innerHTML = html || '<p style="color:#9ca3af;padding:12px;">No hay resultados disponibles.</p>';
+}
+ 
+async function toggleResultadoFase(checkbox) {
+  const idResultado = parseInt(checkbox.dataset.idResultado);
+  const idComp      = parseInt(checkbox.dataset.idComp);
+  const action      = checkbox.checked ? 'asignar_resultado' : 'quitar_resultado';
+ 
+  checkbox.disabled = true;
+  try {
+    const res  = await fetch(`api_fases.php?action=${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action,
+        id_fase:       faseSeleccionada.id_fase,
+        id_resultado:  idResultado,
+        id_competencia: idComp
+      })
+    });
+    const data = await res.json();
+    if (data.error) {
+      alert(data.error);
+      checkbox.checked = !checkbox.checked;
+    } else {
+      // Actualizar resultadosFicha local
+      resultadosFicha.forEach(c => {
+        c.resultados.forEach(r => {
+          if (r.id_resultado === idResultado) {
+            r.id_fase_asignada = checkbox.checked ? faseSeleccionada.id_fase : null;
+          }
+        });
+      });
+    }
+  } catch(e) {
+    alert('Error de red.');
+    checkbox.checked = !checkbox.checked;
+  }
+  checkbox.disabled = false;
+}
+ 
+async function quitarResultadoFase(idFase, idResultado) {
+  if (!confirm('¿Quitar este resultado de la fase?')) return;
+  await fetch('api_fases.php?action=quitar_resultado', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'quitar_resultado', id_fase: idFase, id_resultado: idResultado })
+  });
+  await abrirDetalleFase(faseSeleccionada);
+  await loadFases();
 }

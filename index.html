@@ -4,19 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Juicios Evaluativos</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=analytics-3">
+  <link rel="stylesheet" href="assets/css/styles.css?v=sena-22">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
 <nav>
-  <span class="brand">Juicios Evaluativos</span>
-  <button class="active" onclick="setPage('dashboard', this)">Dashboard</button>
-  <button onclick="setPage('explorador', this)">Explorador</button>
-  <button onclick="setPage('importar', this)">Importar XLS</button>
+  <div class="brand">
+    <div class="brand-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+    </div>
+    <div class="brand-text">
+      <strong>Juicios Evaluativos</strong>
+      <span>SENA</span>
+    </div>
+  </div>
+  <button class="sys-btn" style="display: none;" onclick="setPage('dashboard', this)">Dashboard</button>
+  <button class="sys-btn" style="display: none;" onclick="setPage('explorador', this)">Explorador</button>
+  <button class="sys-btn" style="display: none;" onclick="setPage('importar', this)">Importar XLS</button>
+  <button class="sys-btn" style="display: none;" onclick="setPage('fases', this)">Fases</button>
 </nav>
 
 <main>
-  <section class="ficha-bar">
+  <section class="ficha-bar" id="ficha-bar-container" style="display: none;">
     <label for="g-ficha">Ficha</label>
     <select id="g-ficha" onchange="onFichaChange()">
       <option value="">Selecciona una ficha...</option>
@@ -24,7 +34,23 @@
     <span class="ficha-info" id="g-ficha-info"></span>
   </section>
 
-  <section class="page active" id="page-dashboard">
+  <section class="page active" id="page-bienvenida">
+    <div class="auth-card">
+      <div class="auth-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+      </div>
+      <p class="auth-eyebrow">SISTEMA DE JUICIOS EVALUATIVOS</p>
+      <h1 class="auth-title">Bienvenido al<br>sistema del SENA</h1>
+      <p class="auth-desc">Un espacio para instructores y equipos de seguimiento. Consulta el avance de tus aprendices, revisa los juicios evaluativos e identifica las competencias en riesgo del proyecto formativo.</p>
+      <button class="btn btn-primary auth-btn" onclick="goToDashboard()">
+        Ingresar al sistema
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+      <p class="auth-footer">Acceso exclusivo para personal del SENA</p>
+    </div>
+  </section>
+
+  <section class="page" id="page-dashboard">
     <div class="section-heading">
       <div>
         <p class="eyebrow">Resumen general</p>
@@ -32,6 +58,9 @@
       </div>
       <div class="heading-actions">
         <button class="btn btn-primary ai-btn" id="dash-ai-btn" onclick="generarResumenIA()">Generar resumen IA</button>
+        <button class="btn btn-outline" onclick="exportarDashboardPDF()">
+          <span style="margin-right:8px;">📄</span> Exportar Reporte PDF
+        </button>
         <button class="btn btn-outline" onclick="goToExplorer()">Analizar aprendices</button>
       </div>
     </div>
@@ -48,7 +77,7 @@
       <div class="kpi primary"><div class="val" id="k-pct">-</div><div class="lbl">Avance global</div></div>
     </div>
 
-    <div class="charts-row">
+    <div class="charts-row" id="dashboard-charts">
       <section class="panel">
         <div class="panel-title">
           <h2>Estados de aprendices</h2>
@@ -64,7 +93,12 @@
     </div>
 
     <section class="analytics-section">
-      <div class="section-heading analytics-heading">
+      <div id="analytics-empty" style="text-align: center; padding: 60px 20px; color: var(--muted); display: none;">
+        <h2 style="font-size: 20px; color: var(--text); margin-bottom: 8px;">Selecciona una ficha</h2>
+        <p>Elige una ficha en la barra superior para ver los riesgos y pendientes académicos.</p>
+      </div>
+      <div id="analytics-content">
+        <div class="section-heading analytics-heading">
         <div>
           <p class="eyebrow">Analitica academica</p>
           <h1>Riesgos, pendientes y comparativos</h1>
@@ -101,19 +135,14 @@
         </section>
       </div>
 
-      <div class="charts-row analytics-bottom">
+      <div class="analytics-bottom">
         <section class="panel">
           <div class="panel-title">
             <h2>Estado de aprendices vs avance</h2>
           </div>
           <div class="chart-wrap"><canvas id="chart-estado-avance"></canvas></div>
         </section>
-        <section class="panel">
-          <div class="panel-title">
-            <h2>Comparacion por ficha</h2>
-          </div>
-          <div id="analytics-fichas" class="rank-list"></div>
-        </section>
+      </div>
       </div>
     </section>
   </section>
@@ -124,7 +153,7 @@
         <p class="eyebrow">Consulta unificada</p>
         <h1>Filtra, compara y abre el estudio de cada aprendiz</h1>
       </div>
-      <button class="btn btn-outline" onclick="exportExplorerCSV()">Exportar CSV</button>
+      <button class="btn btn-primary" onclick="exportExplorerCSV()">Exportar CSV</button>
     </div>
 
     <section class="filters explorer-filters">
@@ -209,7 +238,131 @@
       <div class="result-box" id="import-result"></div>
     </section>
   </section>
+  <!-- ========================= PAGE FASES ========================= -->
+<section class="page" id="page-fases">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">Proyecto formativo</p>
+      <h1>Fases y cumplimiento por fase</h1>
+    </div>
+    <button class="btn btn-primary" onclick="abrirModalCrearFase()">+ Nueva fase</button>
+  </div>
+ 
+  <!-- Dashboard de fases: barras de progreso globales -->
+  <section id="fases-dashboard" class="fases-overview">
+    <p class="fases-placeholder">Selecciona una ficha para ver las fases.</p>
+  </section>
+ 
+  <!-- Detalle de fase seleccionada -->
+  <section id="fases-detalle" style="display:none;">
+    <div class="section-heading" style="margin-top:24px;">
+      <h2 id="fase-detalle-titulo">Fase seleccionada</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline" onclick="abrirModalEditarFase()">Editar fase</button>
+        <button class="btn btn-outline btn-danger" onclick="confirmarEliminarFase()">Eliminar</button>
+      </div>
+    </div>
+ 
+    <div class="fases-grid">
+      <!-- Panel izquierdo: resultados de la fase -->
+      <section class="panel fases-panel">
+        <div class="panel-title">
+          <h2>Resultados asignados a esta fase</h2>
+          <button class="btn btn-outline btn-sm" onclick="abrirModalAsignar()">Asignar resultados</button>
+        </div>
+        <div id="fase-resultados-list" class="rank-list"></div>
+      </section>
+ 
+      <!-- Panel derecho: aprendices en la fase -->
+      <section class="panel fases-panel">
+        <div class="panel-title">
+          <h2>Aprendices — avance en esta fase</h2>
+        </div>
+        <div class="table-scroll compact">
+          <table>
+            <thead>
+              <tr>
+                <th>Aprendiz</th>
+                <th>Estado</th>
+                <th>Aprobados</th>
+                <th>Pendientes</th>
+                <th>Avance fase</th>
+              </tr>
+            </thead>
+            <tbody id="fase-aprendices-tbody">
+              <tr><td colspan="5" class="loading">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </section>
+</section>
+<!-- ========================= /PAGE FASES ========================= -->
 </main>
+
+<!-- ========================= MODAL CREAR/EDITAR FASE ========================= -->
+<div class="modal-overlay" id="modal-fase-overlay" onclick="cerrarModalFase(event)">
+  <section class="modal" style="max-width:500px;">
+    <header class="modal-header">
+      <div>
+        <p class="eyebrow">Proyecto formativo</p>
+        <h2 id="modal-fase-titulo">Nueva fase</h2>
+      </div>
+      <button class="modal-close" onclick="document.getElementById('modal-fase-overlay').style.display='none'">x</button>
+    </header>
+    <div class="modal-body" style="padding:24px;">
+      <input type="hidden" id="mf-id-fase">
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Nombre de la fase *</label>
+        <input type="text" id="mf-nombre" class="form-input" placeholder="Ej: Fase 1 - Análisis">
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Descripción</label>
+        <textarea id="mf-descripcion" class="form-input" rows="3" placeholder="Descripción opcional de la fase..."></textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Fecha inicio</label>
+          <input type="date" id="mf-fecha-inicio" class="form-input">
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Fecha fin</label>
+          <input type="date" id="mf-fecha-fin" class="form-input">
+        </div>
+      </div>
+      <div id="mf-error" style="color:#dc3545;font-size:13px;margin-bottom:10px;display:none;"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-outline" onclick="document.getElementById('modal-fase-overlay').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="guardarFase()">Guardar</button>
+      </div>
+    </div>
+  </section>
+</div>
+ 
+<!-- ========================= MODAL ASIGNAR RESULTADOS ========================= -->
+<div class="modal-overlay" id="modal-asignar-overlay" onclick="cerrarModalAsignar(event)">
+  <section class="modal" style="max-width:620px;">
+    <header class="modal-header">
+      <div>
+        <p class="eyebrow">Fase seleccionada</p>
+        <h2>Asignar resultados de aprendizaje</h2>
+      </div>
+      <button class="modal-close" onclick="cerrarModalAsignarBtn()">x</button>
+    </header>
+    <div class="modal-body" style="padding:24px;">
+      <p style="font-size:13px;color:#666;margin-bottom:16px;">
+        Marca los resultados que pertenecen a esta fase. Un resultado solo puede estar en una fase a la vez.
+      </p>
+      <input type="text" id="asignar-busqueda" placeholder="Buscar competencia o resultado..."
+             oninput="filtrarAsignar()" style="width:100%;box-sizing:border-box;margin-bottom:14px;">
+      <div id="asignar-lista" style="max-height:360px;overflow-y:auto;"></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+        <button class="btn btn-primary" onclick="cerrarModalAsignarBtn()">✅ Listo / Cerrar</button>
+      </div>
+    </div>
+  </section>
+</div>
 
 <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
   <section class="modal">
@@ -228,6 +381,9 @@
           <div id="modal-kpis-mini" class="mini-kpis"></div>
           <div id="modal-status" class="status-box"></div>
           <button class="btn btn-primary full ai-btn" style="margin-top:14px;" onclick="generarAnalisisIA()">✨ Generar análisis IA</button>
+          <button class="btn btn-outline full" style="margin-top:8px;" onclick="exportarAprendizPDF()">
+            <span style="margin-right:8px;">📄</span> Descargar Ficha PDF
+          </button>
           <div id="modal-ai-result" class="ai-box" style="display:none; margin-top:14px;"></div>
         </aside>
 
@@ -275,6 +431,6 @@
   </section>
 </div>
 
-<script src="assets/js/app.js?v=analytics-3"></script>
+<script src="assets/js/app.js?v=sena-22"></script>
 </body>
 </html>
