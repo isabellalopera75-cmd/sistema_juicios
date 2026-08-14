@@ -1,0 +1,2 @@
+ <?php                                                                                                              
+  define('OPENAI_API_KEY', getenv('OPENAI_API_KEY') ?: 'sk-proj-aqui-va-tu-api-key-real-ponla-en-dokploy-o-local');
