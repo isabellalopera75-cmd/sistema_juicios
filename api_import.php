@@ -213,6 +213,14 @@ try {
             }
 
             // ── Juicio Evaluativo ──────────────────────────
+            // Check existence BEFORE insert to reliably detect duplicates
+            // (rowCount() with ON DUPLICATE KEY UPDATE is unreliable across MySQL configs)
+            $chk = $pdo->prepare(
+                "SELECT COUNT(*) FROM juicio_evaluativo WHERE id_aprendiz=? AND id_resultado=?"
+            );
+            $chk->execute([$idAprendiz, $idRes]);
+            $exists = (int)$chk->fetchColumn() > 0;
+
             $stmt = $pdo->prepare(
                 "INSERT INTO juicio_evaluativo (id_aprendiz, id_resultado, id_instructor, estado, fecha, id_ficha)
                  VALUES (?,?,?,?,?,?)
@@ -222,11 +230,11 @@ try {
                    fecha=VALUES(fecha)"
             );
             $stmt->execute([$idAprendiz, $idRes, $idInst, $juicioEst, $fechaSQL, $idFicha]);
-            // rowCount(): 1 = new insert, 2 = updated duplicate, 0 = no change
-            if ($stmt->rowCount() === 1) {
-                $insertados++;
-            } else {
+
+            if ($exists) {
                 $duplicados++;
+            } else {
+                $insertados++;
             }
 
         } catch (Exception $e) {
