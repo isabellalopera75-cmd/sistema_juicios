@@ -849,6 +849,19 @@ tbody tr:hover td { background: #f0fdf4 !important; }
   color: #991b1b;
 }
 
+.result-box.warning {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.warn-inline {
+  display: inline-block;
+  margin-top: 4px;
+  font-weight: 600;
+  color: #b45309;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;

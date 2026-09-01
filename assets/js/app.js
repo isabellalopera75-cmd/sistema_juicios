@@ -811,13 +811,18 @@ async function uploadFile() {
     $('btn-upload').disabled = false;
 
     if (d.ok) {
-      res.className = 'result-box';
-      res.innerHTML = `<strong>Importacion exitosa</strong><br>
+      const hasDuplicates = d.duplicados > 0;
+      const allDuplicates = hasDuplicates && d.insertados === 0;
+
+      res.className = allDuplicates ? 'result-box warning' : 'result-box';
+      res.innerHTML = `<strong>${allDuplicates ? 'Archivo ya importado' : 'Importacion exitosa'}</strong><br>
         Ficha: <strong>${esc(d.ficha)}</strong><br>
         Programa: ${esc(d.programa)}<br>
-        Registros procesados: <strong>${esc(d.insertados)}</strong>
+        Registros nuevos: <strong>${esc(d.insertados)}</strong>
+        ${hasDuplicates ? `<br><span class="warn-inline">⚠ ${d.duplicados} registro${d.duplicados === 1 ? '' : 's'} ya existian y fueron ignorados.</span>` : ''}
         ${d.errores?.length ? `<ul>${d.errores.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}`;
       loadFichas();
+
     } else {
       res.className = 'result-box error';
       res.innerHTML = `<strong>Error:</strong> ${esc(d.error)}`;

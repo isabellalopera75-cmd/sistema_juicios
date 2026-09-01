@@ -222,7 +222,12 @@ try {
                    fecha=VALUES(fecha)"
             );
             $stmt->execute([$idAprendiz, $idRes, $idInst, $juicioEst, $fechaSQL, $idFicha]);
-            $insertados++;
+            // rowCount(): 1 = new insert, 2 = updated duplicate, 0 = no change
+            if ($stmt->rowCount() === 1) {
+                $insertados++;
+            } else {
+                $duplicados++;
+            }
 
         } catch (Exception $e) {
             $errores[] = "Fila ".($lineNum+14).": ".$e->getMessage();
