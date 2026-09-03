@@ -1,3 +1,9 @@
 /vendor/
 .env
 *.log
+
+# Volcados de base de datos (contienen datos personales de aprendices)
+*.sql
+
+# Carpetas de herramientas locales
+.atl/

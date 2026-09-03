@@ -16,13 +16,24 @@ let selectedFile = null;
 
 const $ = id => document.getElementById(id);
 
-const api = (action, params = {}) => {
+const api = async (action, params = {}) => {
   const clean = {};
   Object.entries(params).forEach(([key, value]) => {
     if (value !== null && value !== undefined && value !== '') clean[key] = value;
   });
   const u = new URLSearchParams({ action, ...clean });
-  return fetch(`api_data.php?${u}`).then(r => r.json());
+  const response = await fetch(`api_data.php?${u}`);
+  const raw = await response.text();
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`${action}: el servidor no devolvio JSON (HTTP ${response.status}). ${raw.slice(0, 180)}`);
+  }
+  if (!response.ok || (data && data.error)) {
+    throw new Error(`${action}: ${(data && data.error) || `HTTP ${response.status}`}`);
+  }
+  return data;
 };
 
 function debounce(fn, ms) {
@@ -623,18 +634,43 @@ async function openModal(idAprendiz, nombre) {
   $('modal-overlay').classList.add('open');
   $('modal-tbody').innerHTML = '<tr><td colspan="5" class="loading">Cargando...</td></tr>';
 
-  const [stats, juicios, comps] = await Promise.all([
-    api('stats_aprendiz', { id_aprendiz: idAprendiz }),
-    api('juicios_aprendiz', { id_aprendiz: idAprendiz }),
-    api('competencias', { id_ficha: state.fichaId }),
-  ]);
+  try {
+    const [stats, juicios] = await Promise.all([
+      api('stats_aprendiz', { id_aprendiz: idAprendiz }),
+      api('juicios_aprendiz', { id_aprendiz: idAprendiz }),
+    ]);
 
-  currentModalJuicios = juicios;
-  fillSelect($('modal-filter-comp'), 'Todas las competencias', comps, 'id_competencia', 'nombre');
-  $('modal-filter-status').value = '';
+    currentModalJuicios = Array.isArray(juicios) ? juicios : [];
+    fillSelect($('modal-filter-comp'), 'Todas las competencias',
+      competenciasDeJuicios(currentModalJuicios), 'id_competencia', 'nombre');
+    $('modal-filter-status').value = '';
 
-  renderStudentStudy(stats, juicios);
-  renderModalTable(juicios);
+    // Table first: a broken chart must never hide the data.
+    renderModalTable(currentModalJuicios);
+    renderStudentStudy(stats || {}, currentModalJuicios);
+  } catch (error) {
+    showModalError(error);
+  }
+}
+
+// The competence list comes from the learner's own juicios, so the filter always
+// matches what the table shows, with no extra request that can fail.
+function competenciasDeJuicios(juicios) {
+  const map = new Map();
+  juicios.forEach(j => {
+    if (j.id_competencia && !map.has(j.id_competencia)) {
+      map.set(j.id_competencia, { id_competencia: j.id_competencia, nombre: j.competencia });
+    }
+  });
+  return [...map.values()].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
+}
+
+function showModalError(error) {
+  const message = error && error.message ? error.message : String(error);
+  console.error('[estudio individual]', error);
+  $('modal-count').textContent = '0 resultados';
+  $('modal-tbody').innerHTML =
+    `<tr><td colspan="5" class="loading">No se pudo cargar el estudio.<br>${esc(message)}</td></tr>`;
 }
 
 function renderStudentStudy(stats, juicios) {
@@ -702,6 +738,7 @@ function drawStudentCompetenceChart(juicios) {
 function renderAlerts(alertas) {
   const box = $('modal-alerts');
   const list = $('alerts-list');
+  box.style.display = 'block';
   if (!alertas.length) {
     list.innerHTML = '<p class="muted">No hay pendientes que destaquen frente al grupo.</p>';
     return;
