@@ -855,6 +855,56 @@ tbody tr:hover td { background: #f0fdf4 !important; }
   color: #92400e;
 }
 
+.import-counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.import-counters div {
+  background: rgba(255, 255, 255, .65);
+  border-radius: var(--radius);
+  padding: 8px 6px;
+  text-align: center;
+}
+
+.import-counters strong {
+  display: block;
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.import-counters span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  opacity: .75;
+}
+
+.result-box details {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.result-box details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.result-box details ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.result-box details li {
+  margin-bottom: 4px;
+}
+
+.result-box .warn-inline {
+  display: block;
+}
+
 .warn-inline {
   display: inline-block;
   margin-top: 4px;

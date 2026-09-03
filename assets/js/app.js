@@ -848,16 +848,8 @@ async function uploadFile() {
     $('btn-upload').disabled = false;
 
     if (d.ok) {
-      const hasDuplicates = d.duplicados > 0;
-      const allDuplicates = hasDuplicates && d.insertados === 0;
-
-      res.className = allDuplicates ? 'result-box warning' : 'result-box';
-      res.innerHTML = `<strong>${allDuplicates ? 'Archivo ya importado' : 'Importacion exitosa'}</strong><br>
-        Ficha: <strong>${esc(d.ficha)}</strong><br>
-        Programa: ${esc(d.programa)}<br>
-        Registros nuevos: <strong>${esc(d.insertados)}</strong>
-        ${hasDuplicates ? `<br><span class="warn-inline">⚠ ${d.duplicados} registro${d.duplicados === 1 ? '' : 's'} ya existian y fueron ignorados.</span>` : ''}
-        ${d.errores?.length ? `<ul>${d.errores.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}`;
+      res.className = 'result-box';
+      res.innerHTML = renderImportResult(d);
       loadFichas();
 
     } else {
@@ -872,6 +864,49 @@ async function uploadFile() {
     res.textContent = 'Error de conexion con el servidor.';
     res.style.display = 'block';
   }
+}
+
+
+// Reports the reconciliation the import actually performed. A record that
+// already existed is UPDATED, never ignored — saying otherwise made the system
+// look like it rejected re-imports.
+function renderImportResult(d) {
+  const r = d.resumen || {};
+  const nuevos = Number(r.nuevos || 0);
+  const actualizados = Number(r.actualizados || 0);
+  const sinCambios = Number(r.sin_cambios || 0);
+  const huerfanos = d.huerfanos || {};
+  const juiciosHuerfanos = Number(huerfanos.juicios || 0);
+  const aprendicesHuerfanos = huerfanos.aprendices || [];
+
+  let titulo = 'Importacion exitosa';
+  if (!nuevos && !actualizados) titulo = 'Sin cambios: el archivo coincide con la base';
+  else if (!nuevos && actualizados) titulo = 'Ficha actualizada';
+
+  const cambios = (d.cambios || []).slice(0, 10).map(c => `
+    <li>${esc(c.aprendiz)} (${esc(c.documento)}): ${esc(shortText(c.resultado, 60))}
+        <strong>${esc(c.antes)} &rarr; ${esc(c.ahora)}</strong></li>`).join('');
+
+  const listaHuerfanos = aprendicesHuerfanos.slice(0, 5)
+    .map(a => `${esc(a.aprendiz)} (${esc(a.documento)})`).join(', ');
+
+  return `<strong>${titulo}</strong><br>
+    Ficha: <strong>${esc(d.ficha)}</strong><br>
+    Programa: ${esc(d.programa)}
+    <div class="import-counters">
+      <div><strong>${nuevos}</strong><span>Juicios nuevos</span></div>
+      <div><strong>${actualizados}</strong><span>Actualizados</span></div>
+      <div><strong>${sinCambios}</strong><span>Sin cambios</span></div>
+      <div><strong>${Number(r.aprendices_nuevos || 0)}</strong><span>Aprendices nuevos</span></div>
+    </div>
+    ${cambios ? `<details open><summary>Cambios detectados (${actualizados})</summary><ul>${cambios}</ul>
+      ${actualizados > 10 ? `<p class="muted">y ${actualizados - 10} mas.</p>` : ''}</details>` : ''}
+    ${(juiciosHuerfanos || aprendicesHuerfanos.length) ? `<div class="warn-inline">
+        &#9888; En la base hay ${juiciosHuerfanos} juicio(s) y ${aprendicesHuerfanos.length} aprendiz(ces)
+        que no vinieron en este archivo. No se borro nada.
+        ${listaHuerfanos ? `<br>Aprendices: ${listaHuerfanos}${aprendicesHuerfanos.length > 5 ? ', ...' : ''}` : ''}
+      </div>` : ''}
+    ${d.errores?.length ? `<ul>${d.errores.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}`;
 }
 
 async function exportExplorerCSV() {
