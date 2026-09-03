@@ -170,8 +170,8 @@ switch ($action) {
                 COUNT(*) as total,
                 SUM(estado='APROBADO') as aprobados,
                 SUM(estado='POR EVALUAR') as pendientes,
-                ROUND(SUM(estado='APROBADO')*100.0/COUNT(*),1) as pct,
-                id_ficha
+                ROUND(SUM(estado='APROBADO')*100.0/NULLIF(COUNT(*),0),1) as pct,
+                MAX(id_ficha) as id_ficha
             FROM juicio_evaluativo 
             WHERE id_aprendiz = ?
         ");
