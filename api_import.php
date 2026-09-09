@@ -28,6 +28,10 @@ $tmpPath  = $_FILES['archivo']['tmp_name'];
 $origName = $_FILES['archivo']['name'];
 $ext      = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
 
+// El cliente reenvía el archivo con confirmar=1 cuando ya aceptó los riesgos
+// reportados por un intento anterior.
+$confirmado = ($_POST['confirmar'] ?? '') === '1';
+
 if (!in_array($ext, ['xls', 'xlsx'])) {
     jsonResponse(['error' => 'Solo se aceptan archivos .xls o .xlsx'], 400);
 }
@@ -156,6 +160,8 @@ try {
     $aprendicesNuevos = 0;
     $cambios          = [];   // muestra legible de lo que cambió
     $errores          = [];
+    $degradaciones    = [];   // juicios ya APROBADOS que el archivo quiere revertir
+    $totalDegradadas  = 0;
 
     $vistosJuicio   = [];  // claves id_aprendiz_id_resultado presentes en el archivo
     $vistosAprendiz = [];  // documentos presentes en el archivo
@@ -295,6 +301,21 @@ try {
                         'ahora'     => $juicioEst,
                     ];
                 }
+
+                // Un juicio aprobado que vuelve atrás es la señal de un archivo
+                // desactualizado: se registra para pedir confirmación humana.
+                if ($previo['estado'] === 'APROBADO' && $juicioEst !== 'APROBADO') {
+                    $totalDegradadas++;
+                    if (count($degradaciones) < 50) {
+                        $degradaciones[] = [
+                            'documento' => $numDoc,
+                            'aprendiz'  => trim("$nombre $apellidos"),
+                            'resultado' => $resRaw,
+                            'antes'     => $previo['estado'],
+                            'ahora'     => $juicioEst,
+                        ];
+                    }
+                }
             } else {
                 $sinCambios++;
             }
@@ -321,6 +342,33 @@ try {
         }
     }
 
+    // ── 6. Puerta de confirmación ──────────────────────────
+    // Revertir juicios ya aprobados es el síntoma de importar un archivo
+    // viejo. Se deshace todo y se devuelve el diagnóstico para que la
+    // decisión la tome una persona, no el archivo.
+    if ($totalDegradadas > 0 && !$confirmado) {
+        $pdo->rollBack();
+        jsonResponse([
+            'requiere_confirmacion' => true,
+            'motivo'   => 'juicios_ya_aprobados_serian_revertidos',
+            'ficha'    => $codigoFicha,
+            'programa' => $nombreProg,
+            'resumen'  => [
+                'filas_leidas'      => $filasLeidas,
+                'nuevos'            => $nuevos,
+                'actualizados'      => $actualizados,
+                'sin_cambios'       => $sinCambios,
+                'aprendices_nuevos' => $aprendicesNuevos,
+                'degradaciones'     => $totalDegradadas,
+            ],
+            'degradaciones' => $degradaciones,
+            'huerfanos'     => [
+                'juicios'    => $juiciosHuerfanos,
+                'aprendices' => $aprendicesHuerfanos,
+            ],
+        ], 409);
+    }
+
     $pdo->commit();
 
     jsonResponse([
@@ -333,6 +381,7 @@ try {
             'actualizados'      => $actualizados,
             'sin_cambios'       => $sinCambios,
             'aprendices_nuevos' => $aprendicesNuevos,
+            'degradaciones'     => $totalDegradadas,
         ],
         'cambios'   => $cambios,
         'huerfanos' => [

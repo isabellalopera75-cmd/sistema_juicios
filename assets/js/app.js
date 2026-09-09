@@ -830,7 +830,7 @@ function setFile(file) {
   $('import-result').style.display = 'none';
 }
 
-async function uploadFile() {
+async function uploadFile(confirmar = false) {
   if (!selectedFile) return;
   const prog = $('prog-bar');
   const res = $('import-result');
@@ -840,6 +840,7 @@ async function uploadFile() {
 
   const fd = new FormData();
   fd.append('archivo', selectedFile);
+  if (confirmar) fd.append('confirmar', '1');
 
   try {
     const r = await fetch('api_import.php', { method: 'POST', body: fd });
@@ -847,7 +848,13 @@ async function uploadFile() {
     prog.style.display = 'none';
     $('btn-upload').disabled = false;
 
-    if (d.ok) {
+    if (d.requiere_confirmacion) {
+      // Nada se guardo todavia: el servidor deshizo la importacion y espera
+      // una decision explicita antes de revertir juicios ya aprobados.
+      res.className = 'result-box warning';
+      res.innerHTML = renderImportConfirm(d);
+
+    } else if (d.ok) {
       res.className = 'result-box';
       res.innerHTML = renderImportResult(d);
       loadFichas();
@@ -866,6 +873,43 @@ async function uploadFile() {
   }
 }
 
+
+// Asks before applying an import that would send already-approved judgements
+// backwards — the fingerprint of an outdated file. Nothing was written yet.
+function renderImportConfirm(d) {
+  const r = d.resumen || {};
+  const total = Number(r.degradaciones || 0);
+  const huerfanos = d.huerfanos || {};
+  const juiciosHuerfanos = Number(huerfanos.juicios || 0);
+  const aprendicesHuerfanos = huerfanos.aprendices || [];
+
+  const lista = (d.degradaciones || []).slice(0, 10).map(c => `
+    <li>${esc(c.aprendiz)} (${esc(c.documento)}): ${esc(shortText(c.resultado, 60))}
+        <strong>${esc(c.antes)} &rarr; ${esc(c.ahora)}</strong></li>`).join('');
+
+  return `<strong>&#9888; Este archivo parece desactualizado</strong><br>
+    Ficha: <strong>${esc(d.ficha)}</strong> &mdash; ${esc(d.programa)}
+    <p>Hay <strong>${total} juicio(s) ya APROBADOS</strong> en la base que este archivo
+       volveria a dejar sin aprobar. <strong>Todavia no se guardo nada.</strong></p>
+    <details open><summary>Juicios que se revertirian (${total})</summary>
+      <ul>${lista}</ul>
+      ${total > 10 ? `<p class="muted">y ${total - 10} mas.</p>` : ''}
+    </details>
+    ${(juiciosHuerfanos || aprendicesHuerfanos.length) ? `<p class="muted">
+      Ademas, en la base hay ${juiciosHuerfanos} juicio(s) y ${aprendicesHuerfanos.length}
+      aprendiz(ces) que no vienen en este archivo.</p>` : ''}
+    <p>Si es el archivo mas reciente de Sofia Plus, continua. Si subiste un export viejo por error, cancela.</p>
+    <div class="confirm-actions">
+      <button class="btn btn-outline btn-danger" onclick="uploadFile(true)">Importar de todas formas</button>
+      <button class="btn btn-outline" onclick="cancelImport()">Cancelar</button>
+    </div>`;
+}
+
+function cancelImport() {
+  const res = $('import-result');
+  res.className = 'result-box';
+  res.innerHTML = '<strong>Importacion cancelada.</strong> No se modifico ningun dato.';
+}
 
 // Reports the reconciliation the import actually performed. A record that
 // already existed is UPDATED, never ignored — saying otherwise made the system

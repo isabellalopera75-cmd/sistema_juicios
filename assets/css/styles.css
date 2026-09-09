@@ -1879,3 +1879,14 @@ tbody tr:hover td { background: #f0fdf4 !important; }
 .rank-list::-webkit-scrollbar-thumb:hover {
   background: #a0aab5;
 }
+
+.confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.confirm-actions .btn {
+  flex: 1 1 auto;
+}
