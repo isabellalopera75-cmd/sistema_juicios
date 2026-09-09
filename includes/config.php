@@ -39,3 +39,39 @@ function jsonResponse(array $data, int $code = 200): void {
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
 }
+
+// ============================================================
+//  Manejo global de errores: nunca devolver un 500 con cuerpo vacío
+// ============================================================
+
+// Emite un error en formato JSON sin abortar la ejecución.
+function jsonErrorResponse(string $message, int $code = 500): void {
+    if (!headers_sent()) {
+        http_response_code($code);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode(['error' => $message], JSON_UNESCAPED_UNICODE);
+}
+
+// Cualquier excepción no capturada (p. ej. PDOException) responde JSON
+// y deja el detalle completo en el log del servidor.
+set_exception_handler(function (Throwable $e): void {
+    error_log(sprintf(
+        '[%s] %s en %s:%d%s%s',
+        get_class($e), $e->getMessage(), $e->getFile(), $e->getLine(),
+        PHP_EOL, $e->getTraceAsString()
+    ));
+    jsonErrorResponse($e->getMessage());
+    exit;
+});
+
+// Errores fatales (que no pasan por set_exception_handler) también
+// devuelven JSON en lugar de una respuesta vacía.
+register_shutdown_function(function (): void {
+    $err = error_get_last();
+    if ($err === null) return;
+    if (!in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) return;
+
+    error_log(sprintf('[FATAL] %s en %s:%d', $err['message'], $err['file'], $err['line']));
+    jsonErrorResponse($err['message']);
+});
