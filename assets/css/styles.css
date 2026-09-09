@@ -1890,3 +1890,25 @@ tbody tr:hover td { background: #f0fdf4 !important; }
 .confirm-actions .btn {
   flex: 1 1 auto;
 }
+
+/* El estudio individual ya no dibuja graficos: la columna principal la ocupan
+   el analisis de IA, los pendientes y la tabla de juicios. */
+.study-main > .ai-box {
+  margin-bottom: 12px;
+}
+
+#modal-alerts {
+  margin-bottom: 12px;
+}
+
+.pdf-comp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+
+.pdf-comp-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: middle;
+}

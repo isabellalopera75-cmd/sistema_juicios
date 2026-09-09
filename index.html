@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Juicios Evaluativos</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=sena-28">
+  <link rel="stylesheet" href="assets/css/styles.css?v=sena-29">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
@@ -377,27 +377,21 @@
     <div class="modal-body">
       <div class="student-study">
         <aside class="study-side">
-          <div class="score-ring"><canvas id="modal-chart"></canvas></div>
           <div id="modal-kpis-mini" class="mini-kpis"></div>
           <div id="modal-status" class="status-box"></div>
           <button class="btn btn-primary full ai-btn" style="margin-top:14px;" onclick="generarAnalisisIA()">✨ Generar análisis IA</button>
           <button class="btn btn-outline full" style="margin-top:8px;" onclick="exportarAprendizPDF()">
             <span style="margin-right:8px;">📄</span> Descargar Ficha PDF
           </button>
-          <div id="modal-ai-result" class="ai-box" style="display:none; margin-top:14px;"></div>
         </aside>
 
         <section class="study-main">
-          <div class="study-grid">
-            <article class="study-card">
-              <h3>Avance por competencia</h3>
-              <div class="chart-wrap modal-bars"><canvas id="modal-chart-comp"></canvas></div>
-            </article>
-            <article class="study-card" id="modal-alerts">
-              <h3>Pendientes prioritarios</h3>
-              <div id="alerts-list"></div>
-            </article>
-          </div>
+          <div id="modal-ai-result" class="ai-box" style="display:none;"></div>
+
+          <article class="study-card" id="modal-alerts">
+            <h3>Pendientes prioritarios</h3>
+            <div id="alerts-list"></div>
+          </article>
 
           <div class="filters modal-filters">
             <select id="modal-filter-comp" onchange="filterModalJuicios()">
@@ -431,6 +425,6 @@
   </section>
 </div>
 
-<script src="assets/js/app.js?v=sena-28"></script>
+<script src="assets/js/app.js?v=sena-29"></script>
 </body>
 </html>

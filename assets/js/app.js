@@ -8,8 +8,9 @@ const state = {
 let chartEstados = null;
 let chartJuicios = null;
 let chartEstadoAvance = null;
-let chartModal = null;
-let chartModalComp = null;
+// Resumen del aprendiz abierto. Antes estos numeros se leian del grafico de
+// dona; el dato vive aca para que la IA y el PDF no dependan de un canvas.
+let currentModalResumen = { aprobados: 0, pendientes: 0, total: 0, pct: 0 };
 let currentModalJuicios = [];
 let currentModalId = null;
 let selectedFile = null;
@@ -676,6 +677,12 @@ function showModalError(error) {
 function renderStudentStudy(stats, juicios) {
   const res = stats.resumen || {};
   const pct = Number(res.pct ?? 0);
+  currentModalResumen = {
+    aprobados: Number(res.aprobados ?? 0),
+    pendientes: Number(res.pendientes ?? 0),
+    total: Number(res.total ?? 0),
+    pct,
+  };
   $('modal-kpis-mini').innerHTML = `
     <div><strong>${pct}%</strong><span>Avance</span></div>
     <div><strong>${res.aprobados ?? 0}</strong><span>Aprobados</span></div>
@@ -691,12 +698,6 @@ function renderStudentStudy(stats, juicios) {
   $('modal-status').className = `status-box ${tone}`;
   $('modal-status').innerHTML = `<strong>${status}</strong><span>${buildStatusText(pct, pending)}</span>`;
 
-  drawDoughnut('modal-chart', 'aprendiz', chart => chartModal = chart, chartModal, {
-    labels: ['Aprobados', 'Por evaluar'],
-    values: [res.aprobados, res.pendientes],
-    colors: ['#059669', '#d97706'],
-  });
-  drawStudentCompetenceChart(juicios);
   renderAlerts(stats.alertas || []);
 }
 
@@ -704,35 +705,6 @@ function buildStatusText(pct, pending) {
   if (pct >= 90 && pending <= 2) return 'Tiene pocos resultados pendientes frente al total.';
   if (pct < 40 || pending >= 10) return 'Conviene revisar los pendientes antes de nuevas evidencias.';
   return 'El avance es intermedio y necesita seguimiento por competencia.';
-}
-
-function drawStudentCompetenceChart(juicios) {
-  const groups = groupByCompetencia(juicios);
-  const ctx = $('modal-chart-comp').getContext('2d');
-  if (chartModalComp) chartModalComp.destroy();
-  $('modal-chart-comp').parentElement.style.height = `${Math.max(260, groups.length * 38)}px`;
-
-  chartModalComp = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: groups.map(g => shortText(g.competencia, 52)),
-      datasets: [{
-        data: groups.map(g => Math.round(g.aprobados * 100 / Math.max(g.rows.length, 1))),
-        backgroundColor: groups.map(g => colorByPct(g.aprobados * 100 / Math.max(g.rows.length, 1))),
-        borderRadius: 6,
-        barThickness: 16,
-      }],
-    },
-    options: {
-      indexAxis: 'y',
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { beginAtZero: true, max: 100, ticks: { callback: v => `${v}%` } },
-        y: { grid: { display: false }, ticks: { font: { size: 10 } } },
-      },
-    },
-  });
 }
 
 function renderAlerts(alertas) {
@@ -1061,8 +1033,8 @@ function generarResumenIA() {
 function generarAnalisisIA() {
   if (!currentModalId) return;
 
-  const res = chartModal ? chartModal.data.datasets[0].data : [0, 0];
-  const pct = $('modal-kpis-mini').querySelector('div:first-child strong').textContent;
+  const res = currentModalResumen;
+  const pct = `${res.pct}%`;
   const nombre = $('modal-title').textContent;
   const estado = $('modal-status').querySelector('strong').textContent;
   const alertas = [];
@@ -1075,9 +1047,9 @@ function generarAnalisisIA() {
     nombre: nombre,
     estado_academico: estado,
     avance: pct,
-    aprobados: res[0],
-    pendientes: res[1],
-    total_resultados: res[0] + res[1],
+    aprobados: res.aprobados,
+    pendientes: res.pendientes,
+    total_resultados: res.total,
     resultados_pendientes_prioritarios: alertas
   };
 
@@ -1380,9 +1352,24 @@ async function exportarAprendizPDF() {
   const fichaNombre = $('g-ficha').options[$('g-ficha').selectedIndex].text;
   const fecha = new Date().toLocaleDateString();
 
-  // Capturamos los gráficos actuales antes de clonar
-  const chartImg = $('modal-chart').toDataURL('image/png');
-  const chartCompImg = $('modal-chart-comp').toDataURL('image/png');
+  // El avance por competencia se imprime como tabla: no depende de ningun
+  // canvas y se lee mejor que unas barras con las etiquetas recortadas.
+  const avanceComp = groupByCompetencia(currentModalJuicios)
+    .sort((a, b) => String(a.competencia).localeCompare(String(b.competencia)))
+    .map(g => {
+      const total = g.rows.length;
+      const pct = Math.round(g.aprobados * 100 / Math.max(total, 1));
+      return `<tr>
+        <td>${esc(g.competencia)}</td>
+        <td style="text-align:center; white-space:nowrap;">${g.aprobados}/${total}</td>
+        <td style="width:90px;">
+          <div style="background:#e5e7eb; border-radius:4px; height:7px;">
+            <div style="width:${pct}%; height:7px; border-radius:4px; background:${colorByPct(pct)};"></div>
+          </div>
+        </td>
+        <td style="text-align:right; white-space:nowrap;"><strong>${pct}%</strong></td>
+      </tr>`;
+    }).join('');
 
   element.innerHTML = `
     <div class="pdf-header">
@@ -1400,14 +1387,13 @@ async function exportarAprendizPDF() {
     <div class="pdf-two-cols">
       <div class="pdf-col-side">
         <div class="pdf-section-title">Avance Global</div>
-        <img src="${chartImg}" style="width:100%; max-width:200px; margin: 0 auto; display:block;">
         <div class="pdf-mini-stats">
           ${$('modal-kpis-mini').innerHTML}
         </div>
       </div>
       <div class="pdf-col-main">
         <div class="pdf-section-title">Avance por Competencia</div>
-        <img src="${chartCompImg}" style="width:100%">
+        <table class="pdf-comp-table"><tbody>${avanceComp}</tbody></table>
       </div>
     </div>
 
