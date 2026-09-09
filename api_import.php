@@ -231,6 +231,13 @@ try {
         $aprendicesBD[$a['documento']] = $a;
     }
 
+    // Nombres de instructor por id, para poder describir un cambio de
+    // instructor con la persona y no con el id.
+    $nombreInstructor = [];
+    foreach ($pdo->query("SELECT id_instructor, nombre_completo FROM instructor") as $i) {
+        $nombreInstructor[$i['id_instructor']] = $i['nombre_completo'];
+    }
+
     // ── 4. Procesar filas de datos ─────────────────────────
     $nuevos           = 0;
     $actualizados     = 0;
@@ -329,6 +336,7 @@ try {
                     $stmt = $pdo->prepare("SELECT id_instructor FROM instructor WHERE documento = ?");
                     $stmt->execute([$docI]);
                     $cacheInst[$funcRaw] = $stmt->fetchColumn();
+                    if ($cacheInst[$funcRaw]) $nombreInstructor[$cacheInst[$funcRaw]] = $nomI;
                 }
                 $idInst = $cacheInst[$funcRaw] ?: null;
             }
@@ -376,12 +384,30 @@ try {
                    || !sameValue($previo['id_instructor'], $idInst)) {
                 $actualizados++;
                 if (count($cambios) < 50) {
+                    // Detallar el campo real que cambió: un juicio puede seguir
+                    // APROBADO y aun asi traer otra fecha u otro instructor.
+                    $detalles = [];
+                    if (!sameValue($previo['estado'], $juicioEst)) {
+                        $detalles[] = ['campo' => 'estado', 'antes' => $previo['estado'], 'ahora' => $juicioEst];
+                    }
+                    if (!sameValue($previo['fecha'], $fechaSQL)) {
+                        $detalles[] = ['campo' => 'fecha', 'antes' => $previo['fecha'], 'ahora' => $fechaSQL];
+                    }
+                    if (!sameValue($previo['id_instructor'], $idInst)) {
+                        $detalles[] = [
+                            'campo' => 'instructor',
+                            'antes' => $nombreInstructor[$previo['id_instructor']] ?? null,
+                            'ahora' => $nombreInstructor[$idInst] ?? null,
+                        ];
+                    }
+
                     $cambios[] = [
                         'documento' => $numDoc,
                         'aprendiz'  => trim("$nombre $apellidos"),
                         'resultado' => $resRaw,
                         'antes'     => $previo['estado'],
                         'ahora'     => $juicioEst,
+                        'detalles'  => $detalles,
                     ];
                 }
 

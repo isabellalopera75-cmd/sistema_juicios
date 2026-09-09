@@ -905,6 +905,21 @@ function renderImportConfirm(d) {
     </div>`;
 }
 
+// Says WHAT changed. A judgement can stay APROBADO and still bring a new date
+// or instructor, and printing "APROBADO -> APROBADO" explains nothing.
+function describeCambio(c) {
+  const detalles = c.detalles || [];
+  if (!detalles.length) return `${esc(c.antes)} &rarr; ${esc(c.ahora)}`;
+
+  return detalles.map(det => {
+    const fmt = v => (det.campo === 'fecha' && v ? fmtFecha(v) : v);
+    const antes = fmt(det.antes);
+    const ahora = fmt(det.ahora);
+    const par = `${esc(antes || '—')} &rarr; ${esc(ahora || '—')}`;
+    return det.campo === 'estado' ? par : `${det.campo}: ${par}`;
+  }).join(' &middot; ');
+}
+
 function cancelImport() {
   const res = $('import-result');
   res.className = 'result-box';
@@ -929,7 +944,7 @@ function renderImportResult(d) {
 
   const cambios = (d.cambios || []).slice(0, 10).map(c => `
     <li>${esc(c.aprendiz)} (${esc(c.documento)}): ${esc(shortText(c.resultado, 60))}
-        <strong>${esc(c.antes)} &rarr; ${esc(c.ahora)}</strong></li>`).join('');
+        <strong>${describeCambio(c)}</strong></li>`).join('');
 
   const listaHuerfanos = aprendicesHuerfanos.slice(0, 5)
     .map(a => `${esc(a.aprendiz)} (${esc(a.documento)})`).join(', ');
@@ -943,7 +958,7 @@ function renderImportResult(d) {
       <div><strong>${sinCambios}</strong><span>Sin cambios</span></div>
       <div><strong>${Number(r.aprendices_nuevos || 0)}</strong><span>Aprendices nuevos</span></div>
     </div>
-    ${cambios ? `<details open><summary>Cambios detectados (${actualizados})</summary><ul>${cambios}</ul>
+    ${cambios ? `<details><summary>Cambios detectados (${actualizados})</summary><ul>${cambios}</ul>
       ${actualizados > 10 ? `<p class="muted">y ${actualizados - 10} mas.</p>` : ''}</details>` : ''}
     ${(juiciosHuerfanos || aprendicesHuerfanos.length) ? `<div class="warn-inline">
         &#9888; En la base hay ${juiciosHuerfanos} juicio(s) y ${aprendicesHuerfanos.length} aprendiz(ces)
