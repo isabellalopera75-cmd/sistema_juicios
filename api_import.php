@@ -13,6 +13,7 @@ require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/vendor/autoload.php';   // PhpSpreadsheet
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -36,15 +37,92 @@ if (!in_array($ext, ['xls', 'xlsx'])) {
     jsonResponse(['error' => 'Solo se aceptan archivos .xls o .xlsx'], 400);
 }
 
-/** Normalizes a loose date value to SQL format, or null when unusable. */
+/**
+ * Normalizes a loose date value to SQL format, or null when unusable.
+ * Sofia Plus exports dates as Excel serial numbers (45704.698...), not text,
+ * and writes plain dates as d/m/Y — the opposite of what DateTime assumes for
+ * slash-separated values.
+ */
 function toSqlDate($value, string $format = 'Y-m-d') {
     if ($value === null || $value === '' || $value === '-') return null;
+    if ($value instanceof DateTime) return $value->format($format);
+
+    $raw = trim((string)$value);
+    if ($raw === '' || $raw === '-') return null;
+
+    if (is_numeric($raw)) {
+        if ((float)$raw <= 0) return null;
+        try {
+            return ExcelDate::excelToDateTimeObject((float)$raw)->format($format);
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
+    if (preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})#', $raw)) {
+        $parsed = DateTime::createFromFormat('d/m/Y H:i:s', $raw)
+               ?: DateTime::createFromFormat('d/m/Y H:i', $raw)
+               ?: DateTime::createFromFormat('d/m/Y', substr($raw, 0, 10));
+        return $parsed ? $parsed->format($format) : null;
+    }
+
     try {
-        if ($value instanceof DateTime) return $value->format($format);
-        return (new DateTime((string)$value))->format($format);
+        return (new DateTime($raw))->format($format);
     } catch (Exception $e) {
         return null;
     }
+}
+
+/** Strips accents and case so header labels can be matched loosely. */
+function normalizeHeader($value): string {
+    $text = strtolower(trim((string)$value));
+    $text = strtr($text, [
+        'á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ü'=>'u','ñ'=>'n',
+    ]);
+    return preg_replace('/\s+/', ' ', $text);
+}
+
+/**
+ * Maps each logical field to its real column index by reading the header row.
+ * Sofia Plus shifts columns between report versions — the 2026 export inserts
+ * an empty column before the date — so fixed positions silently load the wrong
+ * data. Falls back to the historical layout when a label is missing.
+ */
+function mapColumns(?array $headerRow): array {
+    $fallback = [
+        'tipoDoc' => 0, 'numDoc' => 1, 'nombre' => 2, 'apellidos' => 3, 'estado' => 4,
+        'competencia' => 5, 'resultado' => 6, 'juicio' => 7, 'fecha' => 8, 'funcionario' => 9,
+    ];
+    if (!$headerRow) return $fallback;
+
+    // Order matters: the most specific label claims its column first.
+    $patterns = [
+        'tipoDoc'     => 'tipo de documento',
+        'numDoc'      => 'numero de documento',
+        'apellidos'   => 'apellido',
+        'estado'      => 'estado',
+        'competencia' => 'competencia',
+        'resultado'   => 'resultado',
+        'funcionario' => 'funcionario',
+        'fecha'       => 'fecha',
+        'juicio'      => 'juicio',
+        'nombre'      => 'nombre',
+    ];
+
+    $map   = [];
+    $taken = [];
+    foreach ($patterns as $key => $needle) {
+        foreach ($headerRow as $col => $label) {
+            if (isset($taken[$col])) continue;
+            if (strpos(normalizeHeader($label), $needle) !== false) {
+                $map[$key]   = $col;
+                $taken[$col] = true;
+                break;
+            }
+        }
+    }
+
+    return $map + $fallback;
 }
 
 /** Compares two values treating null and empty string as equivalent. */
@@ -96,6 +174,7 @@ try {
         if (preg_match('/tipo\s*de\s*documento/', $first)) { $headerIndex = $i; break; }
     }
     $startIndex = $headerIndex !== null ? $headerIndex + 1 : 13;
+    $col        = mapColumns($headerIndex !== null ? $rows[$headerIndex] : null);
 
     $pdo = getDB();
     $pdo->beginTransaction();
@@ -175,18 +254,17 @@ try {
     $dataRows = array_slice($rows, $startIndex);
 
     foreach ($dataRows as $lineNum => $row) {
-        // Columnas: 0=TipoDoc, 1=NumDoc, 2=Nombre, 3=Apellidos, 4=Estado,
-        //           5=Competencia, 6=Resultado, 7=Juicio, 8=Fecha, 9=Funcionario
-        $tipoDoc     = trim((string)($row[0] ?? 'CC'));
-        $numDoc      = trim((string)($row[1] ?? ''));
-        $nombre      = trim((string)($row[2] ?? ''));
-        $apellidos   = trim((string)($row[3] ?? ''));
-        $estadoAp    = strtoupper(trim((string)($row[4] ?? 'EN FORMACION')));
-        $compRaw     = trim((string)($row[5] ?? ''));
-        $resRaw      = trim((string)($row[6] ?? ''));
-        $juicioEst   = strtoupper(trim((string)($row[7] ?? 'POR EVALUAR')));
-        $fechaJuicio = $row[8] ?? null;
-        $funcRaw     = trim((string)($row[9] ?? ''));
+        // Las posiciones salen del encabezado real del archivo (ver mapColumns).
+        $tipoDoc     = trim((string)($row[$col['tipoDoc']] ?? 'CC'));
+        $numDoc      = trim((string)($row[$col['numDoc']] ?? ''));
+        $nombre      = trim((string)($row[$col['nombre']] ?? ''));
+        $apellidos   = trim((string)($row[$col['apellidos']] ?? ''));
+        $estadoAp    = strtoupper(trim((string)($row[$col['estado']] ?? 'EN FORMACION')));
+        $compRaw     = trim((string)($row[$col['competencia']] ?? ''));
+        $resRaw      = trim((string)($row[$col['resultado']] ?? ''));
+        $juicioEst   = strtoupper(trim((string)($row[$col['juicio']] ?? 'POR EVALUAR')));
+        $fechaJuicio = $row[$col['fecha']] ?? null;
+        $funcRaw     = trim((string)($row[$col['funcionario']] ?? ''));
 
         if (!$numDoc || !$compRaw || !$resRaw) continue;
         $filasLeidas++;
@@ -231,7 +309,12 @@ try {
 
             // ── Instructor ─────────────────────────────────
             $idInst = null;
-            if ($funcRaw !== '' && trim($funcRaw, " -\t") !== '') {
+            // Un instructor siempre trae letras en el nombre. Si la celda es solo
+            // numeros es que el archivo esta corrido: no se registra nada.
+            $funcEsPersona = $funcRaw !== ''
+                && trim($funcRaw, " -\t") !== ''
+                && preg_match('/\p{L}{2,}/u', $funcRaw);
+            if ($funcEsPersona) {
                 if (!isset($cacheInst[$funcRaw])) {
                     // Formato: "CC 12345678 - NOMBRE APELLIDO"
                     preg_match('/^(\w+)\s+(\d+)\s+-\s+(.+)$/', $funcRaw, $m);
