@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Juicios Evaluativos</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=sena-29">
+  <link rel="stylesheet" href="assets/css/styles.css?v=sena-30">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
@@ -23,6 +23,7 @@
   <button class="sys-btn" style="display: none;" onclick="setPage('explorador', this)">Explorador</button>
   <button class="sys-btn" style="display: none;" onclick="setPage('importar', this)">Importar XLS</button>
   <button class="sys-btn" style="display: none;" onclick="setPage('fases', this)">Fases</button>
+  <button class="sys-btn" style="display: none;" onclick="setPage('fichas', this)">Fichas</button>
 </nav>
 
 <main>
@@ -299,7 +300,73 @@
   </section>
 </section>
 <!-- ========================= /PAGE FASES ========================= -->
+
+<!-- ========================= PAGE FICHAS ========================= -->
+<section class="page" id="page-fichas">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">Administracion</p>
+      <h1>Fichas cargadas en el sistema</h1>
+    </div>
+  </div>
+
+  <p class="muted" style="margin-bottom:14px;">
+    Cada ficha llega al sistema con una importacion de Sofia Plus. Eliminar una borra
+    sus aprendices y todos sus juicios evaluativos; las competencias, resultados e
+    instructores se conservan porque pueden estar en uso por otras fichas.
+  </p>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Ficha</th>
+          <th>Programa</th>
+          <th>Estado</th>
+          <th>Aprendices</th>
+          <th>Juicios</th>
+          <th>Avance</th>
+          <th>Ultimo juicio</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="fichas-admin-tbody">
+        <tr><td colspan="8" class="loading">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+<!-- ========================= /PAGE FICHAS ========================= -->
 </main>
+
+<!-- ========================= MODAL ELIMINAR FICHA ========================= -->
+<div class="modal-overlay" id="modal-borrar-overlay" onclick="cerrarModalBorrarFicha(event)">
+  <section class="modal" style="max-width:520px;">
+    <header class="modal-header">
+      <div>
+        <p class="eyebrow">Accion irreversible</p>
+        <h2>Eliminar ficha</h2>
+      </div>
+      <button class="modal-close" onclick="cerrarModalBorrarFichaDirecto()" aria-label="Cerrar">x</button>
+    </header>
+
+    <div class="modal-body">
+      <div id="borrar-ficha-resumen" class="result-box error" style="display:block;"></div>
+
+      <label for="borrar-ficha-input" style="display:block; margin:14px 0 6px;">
+        Escribi el codigo de la ficha para confirmar:
+      </label>
+      <input type="text" id="borrar-ficha-input" autocomplete="off"
+             placeholder="Codigo de la ficha" oninput="validarCodigoBorrado()">
+
+      <div class="confirm-actions">
+        <button class="btn btn-outline btn-danger" id="borrar-ficha-btn"
+                onclick="confirmarBorrarFicha()" disabled>Eliminar definitivamente</button>
+        <button class="btn btn-outline" onclick="cerrarModalBorrarFichaDirecto()">Cancelar</button>
+      </div>
+    </div>
+  </section>
+</div>
 
 <!-- ========================= MODAL CREAR/EDITAR FASE ========================= -->
 <div class="modal-overlay" id="modal-fase-overlay" onclick="cerrarModalFase(event)">
@@ -425,6 +492,6 @@
   </section>
 </div>
 
-<script src="assets/js/app.js?v=sena-29"></script>
+<script src="assets/js/app.js?v=sena-30"></script>
 </body>
 </html>

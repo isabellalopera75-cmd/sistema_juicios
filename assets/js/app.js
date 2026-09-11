@@ -112,6 +112,8 @@ function setPage(name, btn) {
     loadExplorerFilters();
     loadExplorer();
   }
+
+  if (name === 'fichas') loadFichasAdmin();
 }
 
 function goToDashboard() {
@@ -938,6 +940,116 @@ function renderImportResult(d) {
         ${listaHuerfanos ? `<br>Aprendices: ${listaHuerfanos}${aprendicesHuerfanos.length > 5 ? ', ...' : ''}` : ''}
       </div>` : ''}
     ${d.errores?.length ? `<ul>${d.errores.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}`;
+}
+
+// ── Administracion de fichas ──────────────────────────────────────────────
+
+let fichaAEliminar = null;
+let fichasAdminCache = [];
+
+async function loadFichasAdmin() {
+  const tbody = $('fichas-admin-tbody');
+  tbody.innerHTML = '<tr><td colspan="8" class="loading">Cargando...</td></tr>';
+
+  try {
+    const r = await fetch('api_fichas.php?action=listado');
+    const fichas = await r.json();
+    if (!r.ok) throw new Error(fichas.error || `HTTP ${r.status}`);
+
+    if (!fichas.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="loading">Todavia no hay fichas importadas.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = fichas.map(f => {
+      const juicios = Number(f.juicios || 0);
+      const pct = juicios ? Math.round(Number(f.aprobados || 0) * 100 / juicios) : 0;
+      return `<tr>
+        <td><strong>${esc(f.codigo_ficha)}</strong></td>
+        <td>${esc(shortText(f.programa, 44))}</td>
+        <td>${esc(f.estado_ficha || '-')}</td>
+        <td>${Number(f.aprendices || 0)}</td>
+        <td>${juicios}</td>
+        <td>${pct}%</td>
+        <td>${fmtFecha(f.ultimo_juicio)}</td>
+        <td><button class="btn btn-outline btn-danger btn-sm"
+              onclick="abrirModalBorrarFicha(${Number(f.id_ficha)})">Eliminar</button></td>
+      </tr>`;
+    }).join('');
+
+    fichasAdminCache = fichas;
+  } catch (error) {
+    tbody.innerHTML = `<tr><td colspan="8" class="loading">No se pudo cargar el listado.<br>${esc(error.message)}</td></tr>`;
+  }
+}
+
+function abrirModalBorrarFicha(idFicha) {
+  const ficha = fichasAdminCache.find(f => Number(f.id_ficha) === Number(idFicha));
+  if (!ficha) return;
+
+  fichaAEliminar = ficha;
+  $('borrar-ficha-resumen').innerHTML = `
+    <strong>Se va a eliminar la ficha ${esc(ficha.codigo_ficha)}</strong><br>
+    ${esc(ficha.programa)}
+    <div class="import-counters">
+      <div><strong>${Number(ficha.aprendices || 0)}</strong><span>Aprendices</span></div>
+      <div><strong>${Number(ficha.juicios || 0)}</strong><span>Juicios</span></div>
+      <div><strong>${Number(ficha.aprobados || 0)}</strong><span>Aprobados</span></div>
+      <div><strong>${Number(ficha.fases || 0)}</strong><span>Fases</span></div>
+    </div>
+    <p>Esto no se puede deshacer. Para recuperarlo habria que volver a importar el
+       archivo de Sofia Plus.</p>`;
+
+  $('borrar-ficha-input').value = '';
+  $('borrar-ficha-btn').disabled = true;
+  $('modal-borrar-overlay').classList.add('open');
+  $('borrar-ficha-input').focus();
+}
+
+// El boton solo se habilita cuando el codigo escrito coincide exactamente.
+function validarCodigoBorrado() {
+  const escrito = $('borrar-ficha-input').value.trim();
+  const esperado = fichaAEliminar ? String(fichaAEliminar.codigo_ficha) : null;
+  $('borrar-ficha-btn').disabled = !esperado || escrito !== esperado;
+}
+
+function cerrarModalBorrarFicha(e) {
+  if (e.target.id === 'modal-borrar-overlay') cerrarModalBorrarFichaDirecto();
+}
+
+function cerrarModalBorrarFichaDirecto() {
+  $('modal-borrar-overlay').classList.remove('open');
+  fichaAEliminar = null;
+}
+
+async function confirmarBorrarFicha() {
+  if (!fichaAEliminar) return;
+  const btn = $('borrar-ficha-btn');
+  btn.disabled = true;
+  btn.textContent = 'Eliminando...';
+
+  try {
+    const r = await fetch('api_fichas.php?action=eliminar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id_ficha: fichaAEliminar.id_ficha,
+        confirmacion: $('borrar-ficha-input').value.trim(),
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.error || `HTTP ${r.status}`);
+
+    cerrarModalBorrarFichaDirecto();
+    await loadFichasAdmin();
+    await loadFichas();   // la ficha borrada sale del selector global
+  } catch (error) {
+    $('borrar-ficha-resumen').innerHTML =
+      `<strong>No se pudo eliminar.</strong><br>${esc(error.message)}`;
+  } finally {
+    btn.textContent = 'Eliminar definitivamente';
+    validarCodigoBorrado();
+  }
 }
 
 async function exportExplorerCSV() {
